@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .message { background: #d1ecf1; color: #0c5460; margin: 5px 0; padding: 8px; border-radius: 3px; }
+        #messages {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background: #f9f9f9;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .connect { background: #28a745; color: white; }
+        .disconnect { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Real-time Painting Generation Test</h1>
+    
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <div>
+        <button class="connect" onclick="connectSSE()">Connect to SSE</button>
+        <button class="disconnect" onclick="disconnectSSE()">Disconnect</button>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+    
+    <h3>Real-time Messages:</h3>
+    <div id="messages"></div>
+    
+    <script>
+        let eventSource = null;
+        
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            const userId = 'test-user-' + Date.now();
+            const sseUrl = `http://localhost:3000/api/events/${userId}`;
+            
+            eventSource = new EventSource(sseUrl);
+            
+            eventSource.onopen = () => {
+                updateStatus('Connected to SSE', 'connected');
+                addMessage('SSE connection opened');
+            };
+            
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addMessage(`Received: ${data.type} - ${data.message || JSON.stringify(data)}`);
+                } catch (error) {
+                    addMessage(`Error parsing message: ${error.message}`);
+                }
+            };
+            
+            eventSource.onerror = (error) => {
+                updateStatus('SSE connection error', 'disconnected');
+                addMessage(`SSE Error: ${error.type}`);
+            };
+        }
+        
+        function disconnectSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                updateStatus('Disconnected', 'disconnected');
+                addMessage('SSE connection closed');
+            }
+        }
+        
+        function updateStatus(message, className) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${className}`;
+        }
+        
+        function addMessage(message) {
+            const messages = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+        
+        // Auto-connect on page load
+        window.onload = () => {
+            setTimeout(connectSSE, 1000);
+        };
+    </script>
+</body>
+</html>
