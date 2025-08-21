@@ -16,6 +16,7 @@ let isLoading = true;
 let currentUser = null;
 let sseConnection = null;
 let activeGenerations = new Map(); // Track active generation processes
+let titlesWithImages = new Set(); // Track which titles have generated images
 
 // DOM Elements
 const titleList = document.getElementById('title-list');
@@ -287,6 +288,9 @@ function handleGenerationComplete(data) {
     ai2Progress.style.width = '100%';
     ai2Status.textContent = 'All images processed!';
     
+    // Mark that this title has generated images
+    titlesWithImages.add(titleId);
+    
     // Show success notification
     showNotification('Generation completed! All paintings are ready.', 'success');
     
@@ -500,6 +504,19 @@ async function loadUserData() {
         const titlesResponse = await getTitles();
         titles = titlesResponse.data.titles;
         
+        // Check which titles already have images
+        for (const title of titles) {
+            try {
+                const paintingsResponse = await getPaintings(title.id);
+                const paintings = paintingsResponse.data.paintings || [];
+                if (paintings.length > 0) {
+                    titlesWithImages.add(title.id);
+                }
+            } catch (error) {
+                console.error(`Error checking paintings for title ${title.id}:`, error);
+            }
+        }
+        
         // Fetch global references
         console.log('Loading global references...');
         const referencesResponse = await getGlobalReferences();
@@ -619,6 +636,11 @@ async function loadPaintings(titleId) {
         const response = await getPaintings(titleId);
         const paintings = response.data.paintings || [];
         currentReferenceDataMap = response.data.referenceDataMap || {};
+        
+        // Mark that this title has images if any paintings exist
+        if (paintings.length > 0) {
+            titlesWithImages.add(titleId);
+        }
         
         renderPaintings(paintings);
     } catch (error) {
@@ -800,6 +822,9 @@ function setupEventListeners() {
                 // Select the new title
                 selectTitle(newTitle);
                 
+                // Show loader for first generation of new title
+                showLoading(true);
+                
                 // Now generate paintings
                 await generatePaintingsForTitle(newTitle.id, quantity);
                 
@@ -812,10 +837,24 @@ function setupEventListeners() {
                 alert(error.response?.data?.error || 'Failed to create title and generate paintings');
             } finally {
                 generateBtn.disabled = false;
+                showLoading(false);
             }
         } else {
             // Use the selected title
-            await generatePaintingsForTitle(currentTitle.id, quantity);
+            const isFirstGeneration = !titlesWithImages.has(currentTitle.id);
+            
+            if (isFirstGeneration) {
+                // Show loader only for first generation
+                showLoading(true);
+            }
+            
+            try {
+                await generatePaintingsForTitle(currentTitle.id, quantity);
+            } finally {
+                if (isFirstGeneration) {
+                    showLoading(false);
+                }
+            }
         }
     });
     
@@ -824,6 +863,8 @@ function setupEventListeners() {
         if (!currentTitle) return;
         
         const quantity = parseInt(quantitySelect.value) || 3;
+        
+        // Don't show loader for additional paintings since images already exist
         await generatePaintingsForTitle(currentTitle.id, quantity);
     });
     
