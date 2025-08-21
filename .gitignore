@@ -65,6 +65,10 @@ tmp/
 uploads/*
 !uploads/README.md
 
+# Local database files (do not version)
+painting_generator.db
+database.sqlite
+
 # IDE specific files
 .idea/
 .vscode/
