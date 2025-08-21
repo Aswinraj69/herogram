@@ -160,6 +160,9 @@ function handleGenerationStarted(data) {
         imagesProcessing: 0
     });
     
+    // Show active generation status without blocking UI
+    showActiveGenerationStatus(titleId, true);
+    
     // Update progress UI
     ai1Status.textContent = 'Generating painting ideas...';
     ai1Progress.style.width = '0%';
@@ -284,6 +287,9 @@ function handleGenerationComplete(data) {
     ai2Progress.style.width = '100%';
     ai2Status.textContent = 'All images processed!';
     
+    // Show success notification
+    showNotification('Generation completed! All paintings are ready.', 'success');
+    
     // Hide progress section after a delay
     setTimeout(() => {
         progressSection.style.display = 'none';
@@ -292,6 +298,9 @@ function handleGenerationComplete(data) {
     
     // Clean up generation tracking
     activeGenerations.delete(titleId);
+    
+    // Remove active generation status
+    showActiveGenerationStatus(titleId, false);
     
     // Refresh the paintings display
     loadPaintings(titleId);
@@ -307,6 +316,9 @@ function handleGenerationError(data) {
     
     // Clean up generation tracking
     activeGenerations.delete(titleId);
+    
+    // Remove active generation status
+    showActiveGenerationStatus(titleId, false);
 }
 
 // Create placeholder containers for paintings
@@ -404,6 +416,80 @@ function showLoading(show) {
     buttons.forEach(button => {
         button.disabled = show;
     });
+}
+
+// Show active generation status without blocking UI
+function showActiveGenerationStatus(titleId, isActive) {
+    const generateButton = document.getElementById('generate-btn');
+    const moreButton = document.getElementById('more-thumbnails-btn');
+    
+    if (isActive) {
+        // Add visual indicator to buttons
+        generateButton.classList.add('generating');
+        moreButton.classList.add('generating');
+        
+        // Update button text to show status
+        const originalText = generateButton.textContent;
+        generateButton.setAttribute('data-original-text', originalText);
+        generateButton.textContent = 'Generating...';
+        
+        moreButton.setAttribute('data-original-text', moreButton.textContent);
+        moreButton.textContent = 'Generating...';
+        
+        // Show notification
+        showNotification('Generation started! You can continue generating more paintings.', 'info');
+    } else {
+        // Remove visual indicators
+        generateButton.classList.remove('generating');
+        moreButton.classList.remove('generating');
+        
+        // Restore original button text
+        const originalText = generateButton.getAttribute('data-original-text');
+        if (originalText) {
+            generateButton.textContent = originalText;
+        }
+        
+        const moreOriginalText = moreButton.getAttribute('data-original-text');
+        if (moreOriginalText) {
+            moreButton.textContent = moreOriginalText;
+        }
+    }
+}
+
+// Show notification without blocking UI
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    
+    // Add styles
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background-color: ${type === 'info' ? '#3498db' : type === 'success' ? '#27ae60' : '#e74c3c'};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1000;
+        max-width: 300px;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
 }
 
 // Load user data from server
@@ -702,7 +788,9 @@ function setupEventListeners() {
         // If no title is selected, create one first
         if (!currentTitle) {
             try {
-                showLoading(true);
+                // Temporarily disable button to prevent double-clicks
+                generateBtn.disabled = true;
+                
                 const response = await createTitle(title, instructions);
                 const newTitle = response.data;
                 
@@ -719,11 +807,11 @@ function setupEventListeners() {
                 titleInput.value = '';
                 customInstructions.value = '';
                 
-        } catch (error) {
+            } catch (error) {
                 console.error('Error creating title and generating paintings:', error);
                 alert(error.response?.data?.error || 'Failed to create title and generate paintings');
             } finally {
-                showLoading(false);
+                generateBtn.disabled = false;
             }
         } else {
             // Use the selected title
@@ -811,7 +899,19 @@ async function createNewTitle(title, instructions) {
 // Generate paintings for a title
 async function generatePaintingsForTitle(titleId, quantity) {
     try {
-        showLoading(true);
+        // Don't show full loading overlay - just disable the specific button temporarily
+        const generateButton = document.getElementById('generate-btn');
+        const moreButton = document.getElementById('more-thumbnails-btn');
+        
+        // Temporarily disable buttons to prevent double-clicks
+        generateButton.disabled = true;
+        moreButton.disabled = true;
+        
+        // Re-enable after a short delay to allow new generations
+        setTimeout(() => {
+            generateButton.disabled = false;
+            moreButton.disabled = false;
+        }, 1000);
         
         // Upload any new title-specific references if needed
         if (!globalReferenceToggle.checked && currentTitle?.references) {
@@ -844,8 +944,6 @@ async function generatePaintingsForTitle(titleId, quantity) {
         }
         
         alert(errorMessage);
-    } finally {
-        showLoading(false);
     }
 }
 
@@ -901,6 +999,7 @@ function renderTitlesList() {
         titleList.appendChild(titleElement);
     });
 }
+
 
 // Render reference images
 function renderReferenceImages(references, container) {
